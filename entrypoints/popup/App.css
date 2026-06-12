@@ -1,42 +1,124 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+.popup {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 20px;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #54bc4ae0);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--hairline);
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+h1 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.path {
+  color: var(--muted);
+  font-weight: 400;
 }
 
-.card {
-  padding: 2em;
+.status-line {
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
-.read-the-docs {
-  color: #888;
+.status-line.connected {
+  color: var(--ok);
+}
+
+.status-line.error {
+  color: var(--bad);
+}
+
+.status-line.unconfigured {
+  color: var(--warn);
+}
+
+.status-line.sub {
+  margin-top: -8px;
+  font-size: 0.74rem;
+}
+
+.how {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.how strong {
+  color: var(--lavender);
+  font-weight: 600;
+}
+
+h2 {
+  margin: 0 0 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--pink);
+  letter-spacing: 0.12em;
+}
+
+.recent {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.recent li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 2px;
+  font-size: 0.82rem;
+  border-bottom: 1px dashed var(--hairline);
+}
+
+.recent li:last-child {
+  border-bottom: none;
+}
+
+.recent .prompt {
+  color: var(--mint);
+  flex-shrink: 0;
+}
+
+.recent .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent .time {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+button.primary {
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+  transition: background 150ms ease, box-shadow 150ms ease, transform 120ms ease;
+}
+
+button.primary:hover {
+  background: var(--accent-bright);
+  box-shadow: 0 0 18px rgba(166, 227, 161, 0.35);
+}
+
+button.primary:active {
+  transform: scale(0.98);
 }

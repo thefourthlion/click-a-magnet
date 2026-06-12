@@ -6,6 +6,17 @@
 
 ---
 
+## What This Extension Does
+
+**Click a Magnet** sends magnet links to the user's torrent download client with one click.
+
+1. The **content script** (all pages) intercepts clicks on `a[href^="magnet:"]` links, prevents navigation, and messages the background. It also renders toasts requested by the background.
+2. The **background** service worker resolves the target downloader (explicit pick > preferred > first enabled), resolves a category (explicit menu pick > site rule for the page's domain), and adds the torrent via the matching client (qBittorrent, Transmission, or Deluge). It also owns the right-click context menu: downloader picker when several are active, category submenu per category-capable downloader.
+3. The **options page** manages a *list* of downloaders (add/edit/remove, active toggle, custom label, "preferred" radio), plus **categories** and **site rules** (domain → category auto-assignment).
+4. The **popup** shows the preferred client's connection status, the active-client count, and the last 5 added torrents (with which client each went to).
+
+---
+
 ## Stack
 
 | Layer | Technology | Version / Notes |
@@ -25,16 +36,32 @@
 ```
 click-a-magnet/
 ├── assets/                      # Static assets (imported in code)
-│   └── react.svg
+│   ├── theme.css                # Shared CSS variables (light/dark) for popup + options
+│   └── react.svg                # Leftover from starter (unused)
 ├── entrypoints/                 # WXT entrypoints — each file/dir = one extension piece
 │   ├── popup/                   # Popup UI (browser action)
 │   │   ├── index.html           # Entrypoint — popup HTML shell
 │   │   ├── main.tsx             # React mount point
-│   │   ├── App.tsx              # Root React component
+│   │   ├── App.tsx              # Status + recent torrents + settings button
 │   │   ├── App.css              # Component styles
-│   │   └── style.css            # Global styles
-│   ├── background.ts            # Background service worker (MV3)
-│   └── content.ts               # Content script (matches *://*.google.com/*)
+│   │   └── style.css            # Popup sizing
+│   ├── options/                 # Settings page (opens in a tab)
+│   │   ├── index.html           # Entrypoint
+│   │   ├── main.tsx             # React mount point
+│   │   ├── App.tsx              # Connection form: URL, username, password, test
+│   │   └── style.css            # Settings card styles
+│   ├── background.ts            # Service worker — handles ADD_MAGNET / TEST_CONNECTION messages
+│   └── content.ts               # Content script (<all_urls>) — magnet click interception + toast
+├── utils/                       # Shared logic (imported via @/utils/...)
+│   ├── downloaders/             # Download client implementations
+│   │   ├── types.ts             # DownloaderClient interface, DownloaderConfig, DownloaderEntry, baseUrl()
+│   │   ├── qbittorrent.ts       # qBittorrent Web API v2 (cookie auth)
+│   │   ├── transmission.ts      # Transmission RPC (basic auth + X-Transmission-Session-Id)
+│   │   ├── deluge.ts            # Deluge Web JSON-RPC (password-only auth)
+│   │   └── index.ts             # Registry: downloaders map, getClient(type), displayName(entry)
+│   ├── magnet.ts                # parseMagnetName()
+│   ├── storage.ts               # downloadersStorage, preferredStorage, recentStorage, categoriesStorage, domainRulesStorage, resolveTarget(), categoryForUrl(), migrateLegacyConfig()
+│   └── messages.ts              # Message / MessageResponse / ToastKind types
 ├── public/                      # Static assets copied to output root
 │   ├── icon/                    # Extension icons (auto-discovered)
 │   │   ├── 16.png
@@ -63,9 +90,10 @@ click-a-magnet/
 
 | Entrypoint | File(s) | Purpose |
 |------------|---------|---------|
-| **Popup** | `entrypoints/popup/` | UI shown when user clicks extension icon. React app. |
-| **Background** | `entrypoints/background.ts` | Service worker. Lifecycle, messaging, API listeners. |
-| **Content Script** | `entrypoints/content.ts` | Injected into pages matching `*://*.google.com/*`. |
+| **Popup** | `entrypoints/popup/` | Preferred-client status, active count, recent torrents, "Settings". React app. |
+| **Options** | `entrypoints/options/` | Downloader list management (add/edit/remove, active toggle, preferred). Opens in a tab (`manifest.open_in_tab`). React app. |
+| **Background** | `entrypoints/background.ts` | Service worker. Handles `ADD_MAGNET` / `TEST_CONNECTION` messages, target resolution, context menus, talks to downloader APIs. |
+| **Content Script** | `entrypoints/content.ts` | Injected into `<all_urls>`. Intercepts magnet link clicks, shows toasts. |
 
 ### Entrypoint Rules
 
@@ -102,8 +130,54 @@ click-a-magnet/
 
 - Injected into matching pages. Has DOM access but runs in isolated world by default.
 - Use `defineContentScript({ matches: [...], main(ctx) { ... } })`. Runtime code must be in `main`.
-- `matches` in this project: `['*://*.google.com/*']`.
+- `matches` in this project: `['<all_urls>']` — magnet links can appear anywhere.
+- Click handling uses the **capture phase** (`addEventListener('click', fn, true)`) to beat page handlers, then `preventDefault()` + `stopImmediatePropagation()`.
+- Toasts are plain DOM elements appended to `documentElement` with inline styles and max z-index — no framework in the content script.
 - To inject into main world: use `world: 'MAIN'` or `injectScript` for unlisted scripts.
+
+### Downloaders (utils/downloaders/)
+
+- All API requests go through the **background**, never from content scripts or pages.
+- Every client implements `DownloaderClient`: `name`, `needsUsername`, `urlHint`, `addMagnet()`, `testConnection()`. Adding a new downloader = one new file + one registry entry in `index.ts`. The options UI picks up new clients automatically.
+- Users can save **multiple entries** (even of the same type — the optional `label` distinguishes them, `displayName()` resolves what to show).
+- Errors must be thrown with **user-readable messages** — they're shown verbatim in toasts and the settings page.
+- Host permissions `http://*/*` + `https://*/*` are what let the service worker reach LAN IPs.
+
+**qBittorrent** (Web API v2): POST `/api/v2/auth/login` (form-urlencoded) sets an SID cookie; subsequent `credentials: 'include'` requests send it. v4.x returns 200 + "Ok."/"Fails." body; v5.x returns 204 empty on success, 401 on bad credentials — handle both. Add: POST `/api/v2/torrents/add` (FormData `urls`). Test: GET `/api/v2/app/version`.
+
+**Transmission** (RPC at `/transmission/rpc`): basic auth header. CSRF: first request returns 409 + `X-Transmission-Session-Id` header; retry with it. Add: method `torrent-add` with `{ filename: magnet }`. Test: `session-get` → `version`.
+
+**Deluge** (JSON-RPC at `/json`): `auth.login` with password only (no username; sets `_session_id` cookie), then `web.connected` must be true (Web UI ↔ daemon link). Add: `core.add_torrent_magnet`. Test: `daemon.get_version` with fallback to "connected".
+
+### Context Menu
+
+- Rebuilt from scratch (`removeAll()` + `create()`) on service worker start and whenever `downloadersStorage`, `preferredStorage`, or `categoriesStorage` changes — idempotent.
+- **Leaf ids encode their action as JSON:** `cam-send:{"d":"<entryId>","c":"<category>"}` — both fields optional (`d` absent = resolve preferred; `c` absent = auto category from site rules). Parsed in the click handler; survives service worker restarts because the action lives in the id itself.
+- **Shape:** 0 active → one item that toasts an error. 1 active → "Add to {name}". 2+ → "Add to downloader" parent with one node per downloader. Any category-capable downloader node with categories defined becomes a parent: "Auto / no category" + one child per category.
+- All items use `contexts: ['link']` + `targetUrlPatterns: ['magnet:*']`, with a fallback to unfiltered links if the pattern is rejected (handler validates the `magnet:` prefix).
+- Result feedback goes to the page via a `SHOW_TOAST` tab message rendered by the content script. Fails silently on pages without the content script.
+
+### Categories & Site Rules
+
+- `categoriesStorage` = `string[]` of user-created names (lowercased on save). `domainRulesStorage` = `{ domain, category }[]`.
+- **Resolution order** in `addMagnet`: explicit category from menu pick > `categoryForUrl(sourceUrl)` (matches hostname exactly or as suffix, e.g. `` matches `www.`) > none. The source URL comes from `sender.tab.url` (content script click) or `tab.url` (context menu).
+- Only clients with `supportsCategories: true` receive categories — currently **qBittorrent only**. It calls `/api/v2/torrents/createCategory` first (idempotent, failures ignored) so the category always exists, then passes `category` to `torrents/add`.
+- Deleting a category cascades: its site rules are removed too.
+- Success toast shows the category: "Added to qBittorrent (audiobooks)".
+
+### Messaging
+
+- Types live in `utils/messages.ts` (`Message`, `MessageResponse`).
+- Background listener uses the `sendResponse` + `return true` pattern (WXT's `browser` is native Chrome API, not a promise polyfill).
+- Every response is `{ ok: true, data? }` or `{ ok: false, error }` — content/popup/options never throw on API failures, they render the error.
+
+### Storage
+
+- Use WXT's `storage.defineItem` (see `utils/storage.ts`). Keys: `local:downloaders`, `local:preferredDownloader`, `local:recentTorrents`, `local:categories`, `local:domainRules`.
+- `downloaders` = `DownloaderEntry[]`, each `{ id (uuid), type, label?, url, username, password, enabled }`. Passwords live in plain `storage.local` — standard for this class of extension, but never log or sync them.
+- `preferredDownloader` = entry id or null. **Target resolution** (`resolveTarget()`): explicit id > preferred-if-enabled > first enabled > null.
+- `migrateLegacyConfig()` (run on background start) converts the old single-config keys (`local:downloaderConfig`, `local:qbConfig`) into a one-entry list and marks it preferred.
+- Recent torrents list is capped at 10 entries in storage (popup shows 5); each records the downloader's display name in `client`.
 
 ### Path Aliases
 
@@ -111,11 +185,15 @@ click-a-magnet/
 - `~/`, `@@/`, `~~/` → also project root
 - Public assets: `/icon/48.png`, `/wxt.svg` (paths relative to extension root)
 
-### Styling
+### Styling & Design Language
 
-- Plain CSS. `style.css` = global; `App.css` = component-scoped.
-- Supports `prefers-color-scheme` for light/dark.
-- No Tailwind or CSS-in-JS by default. Add only if needed; discuss first.
+- **Pastel hacker terminal**: dark terminal slate (`#1e1e2e`, Catppuccin-adjacent) with soft pastel accents — mint (primary action), pink (active states), lavender (labels/info), peach (warnings), pastel red (errors). Single dark theme; `color-scheme: dark`.
+- **Monospace everywhere** (`--font-mono`, system mono stack — no remote fonts). Lowercase terminal-style headings and buttons.
+- Motifs: `~/` and `~$` prompt prefixes, `❯` list markers, `#`/`//` comment-style hints, blinking `.cursor` block (defined in theme.css), dashed hairline rules, soft pastel glow on hover/active (box-shadow).
+- Voice: plain, direct UI copy. **Error messages from downloader clients stay verbatim.** Controls stay obvious despite the theme.
+- Plain CSS. `assets/theme.css` holds the design tokens, imported by both popup and options `main.tsx`. `style.css` = entrypoint-level; `App.css` = component-scoped.
+- Content script toasts mirror the palette with inline styles (dark bg, pastel border/text, `❯` prefix) — keep `TOAST_ACCENTS` in sync with theme.css if the palette changes.
+- No Tailwind or CSS-in-JS. Add only if needed; discuss first.
 
 ---
 
@@ -167,18 +245,22 @@ This project has no `.env` or environment variables by default. If you add any:
 
 ## Known Patterns to Preserve
 
-1. **Popup structure:** `index.html` → `main.tsx` → `App.tsx`. Keep this flow.
+1. **HTML entrypoint structure:** `index.html` → `main.tsx` → `App.tsx`. Keep this flow for popup and options.
 2. **WXT defines:** Use `defineBackground`, `defineContentScript` — don't hand-roll manifest entries.
 3. **Icons:** `public/icon/` with sizes 16, 32, 48, 96, 128. WXT auto-discovers `icon/*.png`.
 4. **No source manifest.json** — all manifest config comes from `wxt.config.ts` and entrypoint options.
+5. **Downloader API calls only in background** — content scripts and UI pages send messages; they never fetch the APIs directly.
+6. **Dev browser:** `wxt.config.ts` points the chrome binary at Brave (`webExt.binaries.chrome`). Machine-specific; don't remove without checking with the Human.
 
 ---
 
 ## Known Issues & Tech Debt
 
-- Content script currently matches only `*://*.google.com/*` — placeholder. Update `matches` when scope is defined.
-- Popup is the default WXT + React starter (counter, logos). Replace with real UI when building features.
-- No options page, side panel, or devtools entrypoints. Add as needed.
+- Credentials live in plain `storage.local` (standard for this extension type, but worth knowing).
+- No support for `.torrent` file links yet — magnet URIs only.
+- Magnet links opened via JS (`window.location = 'magnet:...'`) are not intercepted — only real `<a>` clicks.
+- Transmission and Deluge clients are untested against live servers (qBittorrent verified against v5.2.1).
+- `assets/react.svg` is leftover from the starter and unused.
 
 ---
 

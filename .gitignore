@@ -1,5 +1,27 @@
+# Dependencies
+node_modules/
+
+# WXT build output & generated files
+.output/
+.wxt/
+
+# Extension packages (wxt zip)
+*.zip
+
+# Vite / bundler artifacts
+stats.html
+stats-*.json
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment & secrets — never commit credentials
+.env
+.env.*
+!.env.example
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,20 +29,43 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-.output
-stats.html
-stats-*.json
-.wxt
+# Test / coverage
+coverage/
+
+# Local download-client dev data (docker volumes, configs, incomplete downloads)
+transmission/
+deluge/
+qbittorrent/
+
+# Optional local web-ext overrides (machine-specific browser paths)
 web-ext.config.ts
 
-# Editor directories and files
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# Editors & IDEs
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+
+# Cursor (local workspace state)
+.cursor/
