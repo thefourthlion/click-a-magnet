@@ -262,6 +262,7 @@ function App() {
                   role="radio"
                   aria-checked={form.type === t}
                   className={form.type === t ? 'active' : ''}
+                  title={downloaders[t].name}
                   onClick={() => setForm({ ...form, type: t })}
                 >
                   {downloaders[t].name}
@@ -319,8 +320,26 @@ function App() {
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               autoComplete="off"
             />
-            {!client.needsUsername && (
-              <span className="hint"># deluge only needs the web ui password</span>
+            {!client.needsUsername && form.type === 'deluge' && (
+              <span className="hint"># deluge only needs the web ui password; leave username blank</span>
+            )}
+            {!client.needsUsername && form.type === 'tribler' && (
+              <span className="hint"># tribler uses an api key (X-Api-Key), not a username</span>
+            )}
+            {!client.needsUsername && form.type === 'aria2' && (
+              <span className="hint"># aria2 uses an rpc secret (token param), not a username</span>
+            )}
+            {form.type === 'ktorrent' && (
+              <span className="hint"># enable the Web Interface plugin and login in KTorrent settings</span>
+            )}
+            {(form.type === 'utorrent' || form.type === 'bittorrent') && (
+              <span className="hint"># enable Web UI in client preferences; set password if blank login fails</span>
+            )}
+            {form.type === 'flood' && (
+              <span className="hint"># flood tags cannot contain commas; used as categories on add</span>
+            )}
+            {form.type === 'synology' && (
+              <span className="hint"># categories are destination folder paths (e.g. download or Media/TV)</span>
             )}
           </div>
 
@@ -349,8 +368,8 @@ function App() {
       <section className="subsection">
         <h2>categories</h2>
         <p className="section-hint">
-          # file torrents under a category when adding them. qbittorrent only — other clients
-          ignore categories.
+          # file torrents under a category when adding them. supported by qBittorrent,
+          transmission, deluge, ruTorrent, BiglyBT, µTorrent, BitTorrent, and Flood.
         </p>
         {categories.length > 0 && (
           <ul className="chips">

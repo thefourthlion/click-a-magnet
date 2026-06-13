@@ -11,7 +11,7 @@
 **Click a Magnet** sends magnet links to the user's torrent download client with one click.
 
 1. The **content script** (all pages) intercepts clicks on `a[href^="magnet:"]` links, prevents navigation, and messages the background. It also renders toasts requested by the background.
-2. The **background** service worker resolves the target downloader (explicit pick > preferred > first enabled), resolves a category (explicit menu pick > site rule for the page's domain), and adds the torrent via the matching client (qBittorrent, Transmission, or Deluge). It also owns the right-click context menu: downloader picker when several are active, category submenu per category-capable downloader.
+2. The **background** service worker resolves the target downloader (explicit pick > preferred > first enabled), resolves a category (explicit menu pick > site rule for the page's domain), and adds the torrent via the matching client (qBittorrent, Transmission, Deluge, ruTorrent, BiglyBT, Tribler, KTorrent, aria2, µTorrent, BitTorrent, Flood, or Synology Download Station). It also owns the right-click context menu: downloader picker when several are active, category submenu per category-capable downloader.
 3. The **options page** manages a *list* of downloaders (add/edit/remove, active toggle, custom label, "preferred" radio), plus **categories** and **site rules** (domain → category auto-assignment).
 4. The **popup** shows the preferred client's connection status, the active-client count, and the last 5 added torrents (with which client each went to).
 
@@ -58,6 +58,15 @@ click-a-magnet/
 │   │   ├── qbittorrent.ts       # qBittorrent Web API v2 (cookie auth)
 │   │   ├── transmission.ts      # Transmission RPC (basic auth + X-Transmission-Session-Id)
 │   │   ├── deluge.ts            # Deluge Web JSON-RPC (password-only auth)
+│   │   ├── rutorrent.ts         # ruTorrent addtorrent.php + rTorrent XML-RPC (/RPC2)
+│   │   ├── biglybt.ts           # BiglyBT XM Web UI — Transmission-compatible RPC
+│   │   ├── tribler.ts           # Tribler REST API (/api/downloads, X-Api-Key)
+│   │   ├── ktorrent.ts          # KTorrent Web Interface plugin (challenge login)
+│   │   ├── aria2.ts             # aria2 JSON-RPC (/jsonrpc, token auth)
+│   │   ├── utorrent.ts          # µTorrent + BitTorrent Web UI (/gui, token auth)
+│   │   ├── bittorrent.ts        # re-exports BitTorrent client (same API as µTorrent)
+│   │   ├── flood.ts             # Flood REST API (/api/torrents/add-urls, jwt cookie)
+│   │   ├── synology.ts          # Synology Download Station Web API (DSM sid auth)
 │   │   └── index.ts             # Registry: downloaders map, getClient(type), displayName(entry)
 │   ├── magnet.ts                # parseMagnetName()
 │   ├── storage.ts               # downloadersStorage, preferredStorage, recentStorage, categoriesStorage, domainRulesStorage, resolveTarget(), categoryForUrl(), migrateLegacyConfig()
@@ -145,9 +154,25 @@ click-a-magnet/
 
 **qBittorrent** (Web API v2): POST `/api/v2/auth/login` (form-urlencoded) sets an SID cookie; subsequent `credentials: 'include'` requests send it. v4.x returns 200 + "Ok."/"Fails." body; v5.x returns 204 empty on success, 401 on bad credentials — handle both. Add: POST `/api/v2/torrents/add` (FormData `urls`). Test: GET `/api/v2/app/version`.
 
-**Transmission** (RPC at `/transmission/rpc`): basic auth header. CSRF: first request returns 409 + `X-Transmission-Session-Id` header; retry with it. Add: method `torrent-add` with `{ filename: magnet }`. Test: `session-get` → `version`.
+**Transmission** (RPC at `/transmission/rpc`): basic auth header. CSRF: first request returns 409 + `X-Transmission-Session-Id` header; retry with it. Add: method `torrent-add` with `{ filename: magnet, labels: [category] }` when a category is set. Test: `session-get` → `version`.
 
-**Deluge** (JSON-RPC at `/json`): `auth.login` with password only (no username; sets `_session_id` cookie), then `web.connected` must be true (Web UI ↔ daemon link). Add: `core.add_torrent_magnet`. Test: `daemon.get_version` with fallback to "connected".
+**Deluge** (JSON-RPC at `/json`): `auth.login` with password only (no username; sets `_session_id` cookie). Extension auto-connects via `web.get_hosts` + `web.connect` when `web.connected` is false. Add: `core.add_torrent_magnet`, then Label plugin (`label.add` + `label.set_torrent`) when a category is set. Test: `daemon.get_version` with fallback to "connected".
+
+**ruTorrent** (rTorrent Web UI): GET `/php/initplugins.php` to link PHP to rTorrent, then POST `/php/addtorrent.php` with `{ url: magnet, label?, json: 1 }`. Test: XML-RPC `system.client_version` at `/RPC2`. Optional HTTP basic auth. Subdirectory installs supported via the configured base URL.
+
+**BiglyBT** (XM Web UI plugin): Transmission-compatible JSON-RPC at `/transmission/rpc` (falls back to `/rpc`). Add: `torrent-add` with `{ filename: magnet, vuze_tags?: [category] }`. Test: `session-get` → `biglybt-version` or `version`. HTTP basic auth when configured in the Web UI.
+
+**Tribler** (REST API): `PUT /api/downloads` with `{ uri: magnet }`. Auth: `X-Api-Key` header (password field in settings). Test: `GET /api/downloads` + `/docs/swagger.json` for version. No categories on add.
+
+**KTorrent** (Web Interface plugin): `GET /login/challenge.xml`, then `POST /login?page=interface.html` with SHA1(challenge + password) in the `challenge` field (empty `password`). Add: `GET /action?load_torrent=…`. Test: `GET /data/torrents.xml?L10n=no`. Cookie session (`KT_SESSID`). Requires username + password. No categories on add. No Docker stack — manual testing only.
+
+**aria2** (JSON-RPC): POST `/jsonrpc` with `{ jsonrpc: "2.0", method: "aria2.addUri", params: ["token:<secret>", [magnet]] }`. Test: `aria2.getVersion`. RPC secret only (password field in settings). URL may be the RPC base (`http://host:6800`); `/jsonrpc` is appended automatically. No categories on add.
+
+**µTorrent / BitTorrent** (Web UI): GET `/gui/token.html` for CSRF token, then GET `/gui/?token=…&action=add-url&s=…`. HTTP basic auth when configured. Labels via `action=setprops&s=label` after add. Test: `list=1` → `build`. Both desktop clients share the same API; pick the matching type in settings.
+
+**Flood** (REST API): POST `/api/auth/authenticate` (sets `jwt` cookie), then POST `/api/torrents/add-urls` with `{ urls: [magnet], tags?, start: true }`. Test: GET `/api/client/connection-test`. Tags used for categories. Works with rTorrent and other backends configured in Flood.
+
+**Synology Download Station** (Synology Web API): `SYNO.API.Auth` login with `session=DownloadStation` and `format=sid`, then `SYNO.DownloadStation2.Task` (DSM 7+) or `SYNO.DownloadStation.Task` (legacy) to add magnets. Test: `SYNO.DownloadStation.Info` `getinfo`. Categories map to **destination** shared-folder paths. No Docker stack — test on a real NAS.
 
 ### Context Menu
 
@@ -161,7 +186,7 @@ click-a-magnet/
 
 - `categoriesStorage` = `string[]` of user-created names (lowercased on save). `domainRulesStorage` = `{ domain, category }[]`.
 - **Resolution order** in `addMagnet`: explicit category from menu pick > `categoryForUrl(sourceUrl)` (matches hostname exactly or as suffix, e.g. `` matches `www.`) > none. The source URL comes from `sender.tab.url` (content script click) or `tab.url` (context menu).
-- Only clients with `supportsCategories: true` receive categories — currently **qBittorrent only**. It calls `/api/v2/torrents/createCategory` first (idempotent, failures ignored) so the category always exists, then passes `category` to `torrents/add`.
+- Clients with `supportsCategories: true` receive categories: **qBittorrent** (`createCategory` + `torrents/add`), **Transmission** (labels on `torrent-add`), **Deluge** (Label plugin + `label.set_torrent` after add), **ruTorrent** (`label` on `addtorrent.php`), **BiglyBT** (`vuze_tags` on `torrent-add`), **µTorrent** / **BitTorrent** (`setprops` label after add), **Flood** (`tags` on `add-urls`), **Synology Download Station** (`destination` folder path on task create).
 - Deleting a category cascades: its site rules are removed too.
 - Success toast shows the category: "Added to qBittorrent (audiobooks)".
 
@@ -259,7 +284,7 @@ This project has no `.env` or environment variables by default. If you add any:
 - Credentials live in plain `storage.local` (standard for this extension type, but worth knowing).
 - No support for `.torrent` file links yet — magnet URIs only.
 - Magnet links opened via JS (`window.location = 'magnet:...'`) are not intercepted — only real `<a>` clicks.
-- Transmission and Deluge clients are untested against live servers (qBittorrent verified against v5.2.1).
+- qBittorrent verified against v5.2.1; Transmission, Deluge, ruTorrent, BiglyBT, Tribler, and aria2 verified against local Docker stacks (`scripts/test-downloaders.mts`).
 - `assets/react.svg` is leftover from the starter and unused.
 
 ---

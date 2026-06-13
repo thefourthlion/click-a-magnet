@@ -32,10 +32,11 @@ lerna-debug.log*
 # Test / coverage
 coverage/
 
-# Local download-client dev data (docker volumes, configs, incomplete downloads)
-transmission/
-deluge/
-qbittorrent/
+# Download client implementations & local Docker stacks (kept local, not on GitHub)
+utils/downloaders/
+/transmission/
+/deluge/
+/qbittorrent/
 
 # Optional local web-ext overrides (machine-specific browser paths)
 web-ext.config.ts
