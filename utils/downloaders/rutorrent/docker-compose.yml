@@ -1,0 +1,20 @@
+# Test stack for Click a Magnet — rTorrent + ruTorrent Web UI
+# Usage: docker compose up -d
+# Extension URL: http://localhost:8081  (no auth by default in this image)
+
+services:
+  rutorrent:
+    image: lscr.io/linuxserver/rutorrent:latest
+    container_name: cam-test-rutorrent
+    restart: unless-stopped
+    ports:
+      - '8081:80'
+      - '6883:6881'
+      - '6883:6881/udp'
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+    volumes:
+      - ./config:/config
+      - ./downloads:/downloads

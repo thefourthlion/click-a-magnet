@@ -1,4 +1,16 @@
-export type DownloaderType = 'qbittorrent' | 'transmission' | 'deluge';
+export type DownloaderType =
+  | 'qbittorrent'
+  | 'transmission'
+  | 'deluge'
+  | 'rutorrent'
+  | 'biglybt'
+  | 'tribler'
+  | 'ktorrent'
+  | 'aria2'
+  | 'utorrent'
+  | 'bittorrent'
+  | 'flood'
+  | 'synology';
 
 export interface DownloaderConfig {
   type: DownloaderType;

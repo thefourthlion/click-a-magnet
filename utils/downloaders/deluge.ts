@@ -30,22 +30,55 @@ async function login(config: DownloaderConfig): Promise<string> {
   const base = baseUrl(config);
   const ok = await rpc(base, 'auth.login', [config.password]);
   if (!ok) throw new Error('Login failed. Check your Deluge Web UI password.');
-  const connected = await rpc(base, 'web.connected', []);
-  if (!connected) {
-    throw new Error('Logged in, but the Deluge Web UI is not connected to a daemon. Open the Web UI and connect first.');
-  }
+  await ensureConnected(base);
   return base;
+}
+
+/** Connect the Web UI to the first configured daemon host if needed. */
+async function ensureConnected(base: string): Promise<void> {
+  if (await rpc(base, 'web.connected', [])) return;
+  const hosts = (await rpc(base, 'web.get_hosts', [])) as unknown;
+  if (!Array.isArray(hosts) || hosts.length === 0) {
+    throw new Error('Deluge Web UI has no daemon hosts configured.');
+  }
+  const hostId = (hosts[0] as unknown[])[0];
+  if (typeof hostId !== 'string') {
+    throw new Error('Deluge daemon host id is missing.');
+  }
+  await rpc(base, 'web.connect', [hostId]);
+  if (!(await rpc(base, 'web.connected', []))) {
+    throw new Error('Could not connect Deluge Web UI to its daemon.');
+  }
+}
+
+async function ensureLabelPlugin(base: string): Promise<void> {
+  const enabled = (await rpc(base, 'core.get_enabled_plugins', [])) as unknown;
+  if (Array.isArray(enabled) && enabled.includes('Label')) return;
+  await rpc(base, 'core.enable_plugin', ['Label']);
+}
+
+async function applyLabel(base: string, hash: string, label: string): Promise<void> {
+  await ensureLabelPlugin(base);
+  try {
+    await rpc(base, 'label.add', [label]);
+  } catch {
+    // Label may already exist.
+  }
+  await rpc(base, 'label.set_torrent', [hash, label]);
 }
 
 export const deluge: DownloaderClient = {
   name: 'Deluge',
   needsUsername: false,
-  supportsCategories: false,
+  supportsCategories: true,
   urlHint: 'Example: http://192.168.1.100:8112',
 
-  async addMagnet(config, magnet) {
+  async addMagnet(config, magnet, options) {
     const base = await login(config);
-    await rpc(base, 'core.add_torrent_magnet', [magnet, {}]);
+    const hash = await rpc(base, 'core.add_torrent_magnet', [magnet, {}]);
+    if (options?.category && typeof hash === 'string') {
+      await applyLabel(base, hash, options.category);
+    }
   },
 
   async testConnection(config) {

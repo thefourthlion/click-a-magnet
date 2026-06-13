@@ -1,0 +1,23 @@
+# Test stack for Click a Magnet — aria2 (JSON-RPC) + AriaNg web UI
+# Usage: docker compose up -d
+# Extension URL: http://localhost:6800  |  RPC secret: click-a-magnet-test
+# AriaNg UI: http://localhost:8084
+
+services:
+  aria2:
+    image: p3terx/aria2-pro:latest
+    container_name: cam-test-aria2
+    restart: unless-stopped
+    ports:
+      - '6800:6800'
+      - '8084:8080'
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - RPC_SECRET=click-a-magnet-test
+      - RPC_PORT=6800
+      - LISTEN_PORT=6885
+    volumes:
+      - ./config:/config
+      - ./downloads:/downloads

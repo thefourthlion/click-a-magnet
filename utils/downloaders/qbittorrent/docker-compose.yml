@@ -1,0 +1,21 @@
+# Test stack for Click a Magnet — qBittorrent Web UI
+# Usage: docker compose up -d
+# Extension URL: http://localhost:8080  |  user: admin  |  pass: adminadmin
+
+services:
+  qbittorrent:
+    image: qbittorrentofficial/qbittorrent-nox:latest
+    container_name: cam-test-qbittorrent
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+      - '6881:6881'
+      - '6881:6881/udp'
+    environment:
+      - QBT_WEBUI_PORT=8080
+      - QBT_WEBUI_USERNAME=admin
+      - QBT_WEBUI_PASSWORD=adminadmin
+      - TZ=UTC
+    volumes:
+      - ./config:/config
+      - ./downloads:/downloads

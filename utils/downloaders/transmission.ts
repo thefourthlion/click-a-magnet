@@ -50,11 +50,13 @@ async function rpc(
 export const transmission: DownloaderClient = {
   name: 'Transmission',
   needsUsername: true,
-  supportsCategories: false,
+  supportsCategories: true,
   urlHint: 'Example: http://192.168.1.100:9091',
 
-  async addMagnet(config, magnet) {
-    await rpc(config, 'torrent-add', { filename: magnet });
+  async addMagnet(config, magnet, options) {
+    const args: Record<string, unknown> = { filename: magnet };
+    if (options?.category) args.labels = [options.category];
+    await rpc(config, 'torrent-add', args);
   },
 
   async testConnection(config) {

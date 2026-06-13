@@ -1,0 +1,18 @@
+# Test stack for Click a Magnet — µTorrent Web UI (utserver)
+# Usage: docker compose up -d
+# Extension URL: http://localhost:8087
+# Credentials: username admin · password blank (set in Web UI on first visit)
+
+services:
+  utorrent:
+    image: ekho/utorrent:latest
+    container_name: cam-test-utorrent
+    restart: unless-stopped
+    ports:
+      - '8087:8080'
+      - '6887:6881'
+      - '6887:6881/udp'
+    environment:
+      - UID=1000
+      - GID=1000
+      - webui=ng
