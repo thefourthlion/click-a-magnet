@@ -4,68 +4,86 @@ A browser extension that sends magnet links straight to your torrent download cl
 
 ## Features
 
-- Click any magnet link on any page — it's sent to your download client instead of opening
-- Right-click a magnet link → **Add to {your client}**; with multiple active downloaders, pick one from the submenu
-- Supports **qBittorrent**, **Transmission**, and **Deluge** — save as many as you like (with optional custom names)
-- Activate/deactivate downloaders and mark one as **preferred** (the default for plain clicks)
-- **Categories** (qBittorrent): file torrents under a category, picked from the right-click menu or auto-assigned by **site rules** (e.g. `` → `audiobooks`)
-- On-page toast confirms success or shows the error
-- Popup with connection status and recently added torrents
-- Settings page to manage your downloader list, with connection tests
+- **One-click magnets** — click a `magnet:` link on any page; the extension sends it to your client instead of opening a handler
+- **Right-click menu** — pick which downloader (and category) when you have several configured
+- **Many clients** — qBittorrent, Transmission, Deluge, ruTorrent, BiglyBT, Tribler, KTorrent, aria2, µTorrent, BitTorrent, Flood, Synology Download Station (see [support list](./support-list.md))
+- **Multiple downloaders** — save several servers (seedbox, NAS, desktop), toggle active/inactive, mark one as **preferred**
+- **Categories** — file torrents under a label/category where the client supports it; right-click submenu or **site rules** (e.g. `example.com` → `audiobooks`)
+- **On-page toasts** — success or error feedback without leaving the page
+- **Popup** — connection status and recently added torrents
+- **Settings page** — add/edit downloaders, test connection, manage categories and domain rules
 
-## Tech Stack
+## Supported clients
 
-- **WXT** — Web Extension framework
-- **React 19** — UI
-- **TypeScript** — Typing
+| Client | Categories |
+|--------|------------|
+| qBittorrent, Transmission, Deluge, ruTorrent | Yes |
+| BiglyBT, µTorrent, BitTorrent, Flood | Yes (tags/labels) |
+| Synology Download Station | Yes (destination folder path) |
+| Tribler, KTorrent, aria2 | No |
 
-## Configuration
+Full compatibility notes, Docker test stacks, and verification status: **[support-list.md](./support-list.md)**
 
-1. Enable the web interface in your download client (e.g. qBittorrent: Tools → Options → Web UI)
-2. Open the extension's settings (popup → Settings)
-3. Click **+ Add Downloader**, pick your client, enter its web address (e.g. `http://192.168.1.100:8080`) and credentials
-4. Click **Test Connection**, then **Save**
-5. Repeat for any other clients; toggle them active/inactive and pick your preferred one
+## Privacy
 
-## Setup
+The extension stores downloader settings (including credentials) **only in your browser** and sends data **only** to download client URLs you configure. See **[PRIVACY.md](./PRIVACY.md)**.
 
-```bash
-npm install
-```
+## User setup
+
+1. Enable the Web UI / remote API in your download client (e.g. qBittorrent: Tools → Options → Web UI).
+2. Open the extension **Settings** (from the popup).
+3. Click **+ Add Downloader**, choose your client, enter its address (e.g. `http://192.168.1.100:8080`) and credentials.
+4. **Test Connection** → **Save**.
+5. Visit a page with magnet links and click one, or right-click for client/category options.
 
 ## Development
 
+### Prerequisites
+
+- Node.js 18+
+- `utils/downloaders/` — downloader client modules live here locally; that folder is **gitignored** and not published to GitHub. You need it on disk to build (copy from a release or your own checkout).
+
+### Install & run
+
 ```bash
+npm install
 npm run dev
 ```
 
-Then load the unpacked extension in your browser:
+Load the unpacked extension:
 
-- **Chrome:** `chrome://extensions` → Enable Developer mode → Load unpacked → select `.output/chrome-mv3`
-- **Firefox:** `npm run dev:firefox` → `about:debugging` → Load Temporary Add-on → select `.output/firefox-mv2`
+- **Chrome:** `chrome://extensions` → Developer mode → Load unpacked → `.output/chrome-mv3`
+- **Firefox:** `npm run dev:firefox` → `about:debugging` → Load Temporary Add-on → `.output/firefox-mv2`
 
-## Build
-
-```bash
-npm run build
-```
-
-Output is in `.output/`. Use the `chrome-mv3` or `firefox-mv2` folder to load the extension.
-
-## Package for Distribution
+### Build & package
 
 ```bash
-npm run zip        # Chrome
-npm run zip:firefox # Firefox
+npm run build          # production build → .output/
+npm run zip            # Chrome zip for store/sideload
+npm run zip:firefox    # Firefox zip
+npm run compile        # type-check only
 ```
 
-## Scripts
+Integration smoke tests (requires local Docker stacks): `npx tsx scripts/test-downloaders.mts`
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Dev mode (Chrome) |
-| `npm run dev:firefox` | Dev mode (Firefox) |
-| `npm run build` | Production build |
-| `npm run build:firefox` | Production build (Firefox) |
-| `npm run zip` | Create distributable zip |
-| `npm run compile` | Type-check only |
+## Tech stack
+
+- **WXT** — extension framework
+- **React 19** — popup & options UI
+- **TypeScript**
+
+## Project layout
+
+| Path | Purpose |
+|------|---------|
+| `entrypoints/background.ts` | Service worker — API calls, context menu |
+| `entrypoints/content.ts` | Magnet link click interception |
+| `entrypoints/popup/`, `entrypoints/options/` | UI |
+| `utils/downloaders/` | Per-client API implementations (local only) |
+| `utils/storage.ts` | Saved downloaders, categories, domain rules |
+| `support-list.md` | Client compatibility matrix |
+| `PRIVACY.md` | Privacy policy |
+
+## License
+
+See repository license file if present.
